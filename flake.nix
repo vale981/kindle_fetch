@@ -15,14 +15,21 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
         poetry2nix = inputs.poetry2nix.lib.mkPoetry2Nix { inherit pkgs; };
+        kindleFetch = poetry2nix.mkPoetryApplication {
+            projectDir = self;
+            preferWheels = true;
+        };
+
       in
       {
         packages = {
-          kindleFetch = poetry2nix.mkPoetryApplication {
-            projectDir = self;
-            preferWheels = true;
-          };
+          kindleFetch = kindleFetch;
           default = self.packages.${system}.kindleFetch;
+        };
+
+        apps.default = {
+          type = "app";
+          program = "${kindleFetch}/bin/kindle_fetch";
         };
 
         # Shell for app dependencies.

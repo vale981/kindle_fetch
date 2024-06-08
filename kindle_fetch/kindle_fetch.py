@@ -1,9 +1,6 @@
 #! /usr/bin/env python
-import glob
-import os
 from pathlib import Path
 import re
-import time
 import shutil
 import urllib.request
 import asyncio
@@ -12,12 +9,9 @@ import subprocess
 from aioimaplib import aioimaplib
 from collections import namedtuple
 import re
-from asyncio import run, wait_for
+from asyncio import wait_for
 from collections import namedtuple
-from email.message import Message
 from email.parser import BytesHeaderParser, BytesParser
-from typing import Collection
-from contextlib import suppress
 from dataclasses import dataclass
 
 
@@ -46,6 +40,7 @@ class Options:
 
 
 def get_document_title(header_string):
+    """Get the title of the document from the email header."""
     m = re.search(r'"(.*?)" from your Kindle', header_string)
 
     if not m:
@@ -55,6 +50,10 @@ def get_document_title(header_string):
 
 
 def get_download_link(text):
+    """
+    Get the download link and whether the file is the full document or
+    just `page` pages from the email body.
+    """
     m = re.search(r"\[Download PDF\]\((.*?)\)", text)
 
     if not m:
@@ -75,6 +74,12 @@ MessageAttributes = namedtuple("MessageAttributes", "uid flags sequence_number")
 
 
 async def fetch_messages_headers(imap_client: aioimaplib.IMAP4_SSL, max_uid: int):
+    """
+    Fetch the headers of the messages in the mailbox.
+
+    Pretty much stolen from the `aioimaplib` examples.
+    """
+
     response = await imap_client.uid(
         "fetch",
         "%d:*" % (max_uid + 1),
@@ -112,22 +117,31 @@ async def fetch_messages_headers(imap_client: aioimaplib.IMAP4_SSL, max_uid: int
 
 
 async def fetch_message_body(imap_client: aioimaplib.IMAP4_SSL, uid: int):
+    """Fetch the message body of the message with the given ``uid``."""
     dwnld_resp = await imap_client.uid("fetch", str(uid), "BODY.PEEK[]")
     return BytesParser().parsebytes(dwnld_resp.lines[1])
 
 
 async def remove_message(imap_client: aioimaplib.IMAP4_SSL, uid: int):
+    """Mark the message with the given ``uid`` as deleted and expunge it."""
     await imap_client.uid("store", str(uid), "+FLAGS (\Deleted \Seen)")
     return await imap_client.expunge()
 
 
 async def wait_for_new_message(imap_client, options: Options):
+    """
+    Wait for a new message to arrive in the mailbox, detect Kindle
+    messages and download the PDF linked in if possible.
+    """
+
     persistent_max_uid = 1
     persistent_max_uid, head = await fetch_messages_headers(
         imap_client, persistent_max_uid
     )
+
     while True:
         print("Waiting for new message")
+
         idle_task = await imap_client.idle_start(timeout=60)
         msg = await imap_client.wait_server_push()
         imap_client.idle_done()
@@ -169,11 +183,16 @@ async def wait_for_new_message(imap_client, options: Options):
 
                 await remove_message(imap_client, persistent_max_uid)
 
-        # await asyncio.wait_for(idle_task, timeout=5)
-        # print("ending idle")
-
 
 async def make_client(host, user, password, folder):
+    """Connect to the IMAP server and login.
+
+    :param host: the IMAP server to connect to
+    :param user: the IMAP username
+    :param password: the password to the server
+    :param folder: the folder to monitor for new messages
+    """
+
     imap_client = aioimaplib.IMAP4_SSL(host=host)
     await imap_client.wait_hello_from_server()
     await imap_client.login(user, password)
@@ -185,7 +204,7 @@ async def make_client(host, user, password, folder):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        prog="Kindle Fetcher",
+        prog="kindle_fetch",
         description="Monitors you Email and automatically downloads the notes sent to it.",
     )
 
@@ -232,13 +251,17 @@ def parse_args():
     )
 
 
-if __name__ == "__main__":
+def main():
     options = parse_args()
     loop = asyncio.get_event_loop()
 
-    client = loop.run_until_complete(
-        make_client(options.server, options.user, options.password, options.mailbox)
-    )
+    try:
+        client = loop.run_until_complete(
+            make_client(options.server, options.user, options.password, options.mailbox)
+        )
+    except Exception as e:
+        print(f"Failed to connect to the server: {e}")
+        exit(1)
 
     loop.run_until_complete(wait_for_new_message(client, options))
     loop.run_until_complete(client.logout())

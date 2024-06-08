@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "kindlefetch"
+name = "kindle_fetch"
 version = "0.1.0"
 description = ""
 authors = ["Valentin Boettcher <hiro@protagon.space>"]
@@ -14,3 +14,7 @@ aioimaplib = "^1.0.1"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+
+[tool.poetry.scripts]
+kindle_fetch = 'kindle_fetch.kindle_fetch:main'
