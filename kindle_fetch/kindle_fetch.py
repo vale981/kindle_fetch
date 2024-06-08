@@ -5,6 +5,7 @@ import shutil
 import urllib.request
 import asyncio
 import argparse
+import logging
 import subprocess
 from aioimaplib import aioimaplib
 from collections import namedtuple
@@ -13,6 +14,8 @@ from asyncio import wait_for
 from collections import namedtuple
 from email.parser import BytesHeaderParser, BytesParser
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -112,7 +115,7 @@ async def fetch_messages_headers(imap_client: aioimaplib.IMAP4_SSL, max_uid: int
                 message_headers = BytesHeaderParser().parsebytes(response.lines[i + 1])
                 new_max_uid = uid
     else:
-        print("error %s" % response)
+        logger.error("error %s" % response)
     return new_max_uid, message_headers
 
 
@@ -140,7 +143,7 @@ async def wait_for_new_message(imap_client, options: Options):
     )
 
     while True:
-        print("Waiting for new message")
+        logger.debug("waiting for new message")
 
         idle_task = await imap_client.idle_start(timeout=60)
         msg = await imap_client.wait_server_push()
@@ -176,7 +179,7 @@ async def wait_for_new_message(imap_client, options: Options):
                 filename += ".pdf"
 
                 outpath = options.kindle_dir / filename
-                print(f"Downloading '{doc_title}' -> '{outpath}'")
+                logger.info(f"downloading '{doc_title}' -> '{outpath}'")
 
                 urllib.request.urlretrieve(link, outpath)
                 shutil.copy(outpath, options.latest_path)
@@ -202,7 +205,7 @@ async def make_client(host, user, password, folder):
     return imap_client
 
 
-def parse_args():
+def parse_args_and_configure_logging():
     parser = argparse.ArgumentParser(
         prog="kindle_fetch",
         description="Monitors you Email and automatically downloads the notes sent to it.",
@@ -233,6 +236,11 @@ def parse_args():
         help="the folder to monitor for new messages",
         default="INBOX",
     )
+    parser.add_argument(
+        "--loglevel",
+        default="info",
+        help="logging level; example --loglevel debug, default=warning",
+    )
 
     args = parser.parse_args()
 
@@ -240,6 +248,8 @@ def parse_args():
     kindle_dir = Path(args.outdir).expanduser()
     kindle_dir.mkdir(exist_ok=True, parents=True)
     latest_path = Path(kindle_dir / args.current_file).with_suffix(".pdf")
+
+    logging.basicConfig(level=args.loglevel.upper())
 
     return Options(
         server=args.server,
@@ -252,16 +262,18 @@ def parse_args():
 
 
 def main():
-    options = parse_args()
+    options = parse_args_and_configure_logging()
     loop = asyncio.get_event_loop()
 
+    logger.info("logging in")
     try:
         client = loop.run_until_complete(
             make_client(options.server, options.user, options.password, options.mailbox)
         )
     except Exception as e:
-        print(f"Failed to connect to the server: {e}")
+        logger.error(f"Failed to connect to the server: {e}")
         exit(1)
 
+    logger.info("starting monitor")
     loop.run_until_complete(wait_for_new_message(client, options))
     loop.run_until_complete(client.logout())
