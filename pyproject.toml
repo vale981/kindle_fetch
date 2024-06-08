@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "kindlefetch"
+version = "0.1.0"
+description = ""
+authors = ["Valentin Boettcher <hiro@protagon.space>"]
+license = "GPL3"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+aioimaplib = "^1.0.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
