@@ -7,6 +7,8 @@ import time
 import shutil
 import urllib.request
 import asyncio
+import argparse
+import subprocess
 from aioimaplib import aioimaplib
 from collections import namedtuple
 import re
@@ -16,10 +18,31 @@ from email.message import Message
 from email.parser import BytesHeaderParser, BytesParser
 from typing import Collection
 from contextlib import suppress
+from dataclasses import dataclass
 
-KINDLE_DIR = Path.home() / "kindle_dump/"
 
-LATEST_PATH = KINDLE_DIR / "latest.pdf"
+@dataclass
+class Options:
+    server: str
+    """The IMAP server to connect to."""
+
+    user: str
+    """The IMAP username."""
+
+    password: str
+    """The password to the server."""
+
+    kindle_dir: Path
+    """The directory to dump the note PDFs in."""
+
+    latest_path: Path
+    """
+    The path to the file that will contain the the most currently
+    downloaded pdf relative to :any:`kindle_dir`.
+    """
+
+    mailbox: str
+    """The folder to monitor for new messages."""
 
 
 def get_document_title(header_string):
@@ -40,18 +63,6 @@ def get_download_link(text):
     p = re.search(r"([0-9]+) page", text)
     page = p.group(1) if p else None
     return m.group(1), page
-
-
-# LAST_LINK = None
-# while True:
-#     current_link = monitor_kindle()
-
-#     if current_link != LAST_LINK and current_link is not None:
-#         LAST_LINK = current_link
-#         print("Downloading:", LAST_LINK)
-#
-
-#     time.sleep(5)
 
 
 ID_HEADER_SET = {
@@ -105,15 +116,20 @@ async def fetch_message_body(imap_client: aioimaplib.IMAP4_SSL, uid: int):
     return BytesParser().parsebytes(dwnld_resp.lines[1])
 
 
-async def wait_for_new_message(imap_client):
+async def remove_message(imap_client: aioimaplib.IMAP4_SSL, uid: int):
+    await imap_client.uid("store", str(uid), "+FLAGS (\Deleted \Seen)")
+    return await imap_client.expunge()
+
+
+async def wait_for_new_message(imap_client, options: Options):
     persistent_max_uid = 1
     persistent_max_uid, head = await fetch_messages_headers(
         imap_client, persistent_max_uid
     )
     while True:
+        print("Waiting for new message")
         idle_task = await imap_client.idle_start(timeout=60)
         msg = await imap_client.wait_server_push()
-        print(msg)
         imap_client.idle_done()
         await wait_for(idle_task, timeout=5)
 
@@ -145,28 +161,84 @@ async def wait_for_new_message(imap_client):
 
                 filename += ".pdf"
 
-                print(f"Got '{doc_title}'")
-                urllib.request.urlretrieve(link, LATEST_PATH)
-                shutil.copy(LATEST_PATH, KINDLE_DIR / filename)
+                outpath = options.kindle_dir / filename
+                print(f"Downloading '{doc_title}' -> '{outpath}'")
+
+                urllib.request.urlretrieve(link, outpath)
+                shutil.copy(outpath, options.latest_path)
+
+                await remove_message(imap_client, persistent_max_uid)
 
         # await asyncio.wait_for(idle_task, timeout=5)
         # print("ending idle")
 
 
-async def make_client(host, user, password):
+async def make_client(host, user, password, folder):
     imap_client = aioimaplib.IMAP4_SSL(host=host)
     await imap_client.wait_hello_from_server()
     await imap_client.login(user, password)
 
-    await imap_client.select("Kindle")
+    await imap_client.select(folder)
 
     return imap_client
 
 
-if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    client = loop.run_until_complete(
-        make_client("protagon.space", "hiro@protagon.space", "DsAgeviNZ.")
+def parse_args():
+    parser = argparse.ArgumentParser(
+        prog="Kindle Fetcher",
+        description="Monitors you Email and automatically downloads the notes sent to it.",
     )
-    loop.run_until_complete(wait_for_new_message(client))
+
+    parser.add_argument("server", type=str, help="the IMAP server to connect to")
+    parser.add_argument("user", type=str, help="the IMAP username")
+    parser.add_argument(
+        "pass_command",
+        type=str,
+        help="a shell command that returns the password to the server",
+    )
+    parser.add_argument(
+        "--outdir",
+        type=str,
+        help="the directory to dump the note PDFs in",
+        default="~/kindle_dump",
+    )
+    parser.add_argument(
+        "--current_file",
+        type=str,
+        help="the path to the file that will contain the the most currently downloaded pdf relative to `outdir`",
+        default="latest.pdf",
+    )
+    parser.add_argument(
+        "--imap_folder",
+        type=str,
+        help="the folder to monitor for new messages",
+        default="INBOX",
+    )
+
+    args = parser.parse_args()
+
+    password = subprocess.check_output(args.pass_command, shell=True, text=True).strip()
+    kindle_dir = Path(args.outdir).expanduser()
+    kindle_dir.mkdir(exist_ok=True, parents=True)
+    latest_path = Path(kindle_dir / args.current_file).with_suffix(".pdf")
+
+    return Options(
+        server=args.server,
+        user=args.user,
+        password=password,
+        kindle_dir=kindle_dir,
+        latest_path=latest_path,
+        mailbox=args.imap_folder,
+    )
+
+
+if __name__ == "__main__":
+    options = parse_args()
+    loop = asyncio.get_event_loop()
+
+    client = loop.run_until_complete(
+        make_client(options.server, options.user, options.password, options.mailbox)
+    )
+
+    loop.run_until_complete(wait_for_new_message(client, options))
     loop.run_until_complete(client.logout())
