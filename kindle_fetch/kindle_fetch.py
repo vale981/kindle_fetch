@@ -44,7 +44,9 @@ class Options:
 
 def get_document_title(header_string):
     """Get the title of the document from the email header."""
-    m = re.search(r'"(.*?)" from your Kindle', header_string)
+    m = re.search(
+        r'"(.*?)" from your Kindle', header_string.replace("\n", " ").replace("\r", "")
+    )
 
     if not m:
         return None
@@ -57,9 +59,11 @@ def get_download_link(text):
     Get the download link and whether the file is the full document or
     just `page` pages from the email body.
     """
-    m = re.search(r"\[Download PDF\]\((.*?)\)", text)
+    m = re.search(
+        r"\[Download PDF\]\((.*?)\)", text.replace("\n", " ").replace("\r", "")
+    )
 
-    if not m:
+    IF not m:
         return None, None
 
     p = re.search(r"([0-9]+) page", text)
@@ -164,11 +168,14 @@ async def wait_for_new_message(imap_client, options: Options):
                 doc_title = get_document_title(head.as_string())
 
                 if doc_title is None:
+                    logger.info(f"No document title found in '{head.as_string()}'.")
                     continue
 
                 link, page = get_download_link(str(body))
 
                 if link is None:
+                    logger.info("No pdf download link found.")
+                    logger.debug(str(body))
                     continue
 
                 filename = f"{doc_title.replace(' ','')}"
