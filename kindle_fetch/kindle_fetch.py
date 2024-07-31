@@ -45,7 +45,8 @@ class Options:
 def get_document_title(header_string):
     """Get the title of the document from the email header."""
     m = re.search(
-        r'"(.*?)" from your Kindle', header_string.replace("\n", " ").replace("\r", "")
+        r'"(.*?)" from your ',
+        header_string.replace("\n", " ").replace("\r", "").replace("  ", " "),
     )
 
     if not m:
@@ -60,7 +61,8 @@ def get_download_link(text):
     just `page` pages from the email body.
     """
     m = re.search(
-        r"\[Download PDF\]\((.*?)\)", text.replace("\n", " ").replace("\r", "")
+        r"\[Download PDF\]\((.*?)\)",
+        text.replace("\n", " ").replace("\r", "").replace("  ", " "),
     )
 
     if not m:
