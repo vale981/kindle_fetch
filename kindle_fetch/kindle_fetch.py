@@ -63,7 +63,7 @@ def get_download_link(text):
         r"\[Download PDF\]\((.*?)\)", text.replace("\n", " ").replace("\r", "")
     )
 
-    IF not m:
+    if not m:
         return None, None
 
     p = re.search(r"([0-9]+) page", text)
