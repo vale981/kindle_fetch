@@ -149,12 +149,15 @@ async def wait_for_new_message(imap_client, options: Options):
     )
 
     while True:
-        logger.debug("waiting for new message")
+        try:
+            logger.debug("waiting for new message")
 
-        idle_task = await imap_client.idle_start(timeout=60)
-        msg = await imap_client.wait_server_push()
-        imap_client.idle_done()
-        await wait_for(idle_task, timeout=5)
+            idle_task = await imap_client.idle_start(timeout=float("inf"))
+            msg = await imap_client.wait_server_push()
+            imap_client.idle_done()
+            await wait_for(idle_task, timeout=float("inf"))
+        except TimeoutError:
+            continue
 
         for message in msg:
             if message.endswith(b"EXISTS"):
