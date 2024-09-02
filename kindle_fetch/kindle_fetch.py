@@ -183,7 +183,7 @@ async def wait_for_new_message(imap_client, options: Options):
                     logger.debug(str(body))
                     continue
 
-                filename = f"{doc_title.replace(' ','')}"
+                filename = f"{doc_title.replace(' ','_')}"
 
                 if page:
                     filename += f"_{page}_pages"
