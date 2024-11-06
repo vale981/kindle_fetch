@@ -63,7 +63,7 @@ def get_download_link(text):
     text = quopri.decodestring(text).decode("utf-8", errors="ignore")
     logger.debug(text)
 
-    m = re.search(r'''href="(https://.*\.amazon\..*?)"''', text)
+    m = re.search(r'''href="(https://.*\.amazon\..*\.pdf.*?)"''', text)
     if not m:
         return None, None
 
