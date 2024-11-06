@@ -1,19 +1,18 @@
 #! /usr/bin/env python
-from pathlib import Path
+import argparse
+import asyncio
+import logging
 import re
 import shutil
-import urllib.request
-import asyncio
-import argparse
-import logging
 import subprocess
-from aioimaplib import aioimaplib
-from collections import namedtuple
-import re
+import urllib.request
 from asyncio import wait_for
 from collections import namedtuple
-from email.parser import BytesHeaderParser, BytesParser
 from dataclasses import dataclass
+from email.parser import BytesHeaderParser, BytesParser
+from pathlib import Path
+import quopri
+from aioimaplib import aioimaplib
 
 logger = logging.getLogger(__name__)
 
@@ -60,11 +59,11 @@ def get_download_link(text):
     Get the download link and whether the file is the full document or
     just `page` pages from the email body.
     """
-    m = re.search(
-        r"\[Download PDF\]\((.*?)\)",
-        text.replace("\n", " ").replace("\r", "").replace("  ", " "),
-    )
 
+    text = quopri.decodestring(text).decode("utf-8", errors="ignore")
+    logger.debug(text)
+
+    m = re.search(r'''href="(https://.*\.amazon\..*?)"''', text)
     if not m:
         return None, None
 
