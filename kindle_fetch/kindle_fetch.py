@@ -219,7 +219,8 @@ async def make_client(host, user, password, folder):
 def parse_args_and_configure_logging():
     parser = argparse.ArgumentParser(
         prog="kindle_fetch",
-        description="Monitors you Email and automatically downloads the notes sent to it.",
+        description="Monitors you email and automatically downloads the kindle PDF notes sent to it.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     parser.add_argument("server", type=str, help="the IMAP server to connect to")
@@ -227,30 +228,30 @@ def parse_args_and_configure_logging():
     parser.add_argument(
         "pass_command",
         type=str,
-        help="a shell command that returns the password to the server",
+        help="A shell command that returns the password to the server.",
     )
     parser.add_argument(
         "--outdir",
         type=str,
-        help="the directory to dump the note PDFs in",
+        help="The kindle note PDFs will be saved into `OUTDIR/[name].pdf`.",
         default="~/kindle_dump",
     )
     parser.add_argument(
         "--current_file",
         type=str,
-        help="the path to the file that will contain the the most currently downloaded pdf relative to `outdir`",
-        default="latest.pdf",
+        help="The latest downloaded file will be copied to `OUTDIR/[current_file]",
+        default=".latest.pdf",
     )
     parser.add_argument(
         "--imap_folder",
         type=str,
-        help="the folder to monitor for new messages",
+        help="The IMAP folder to monitor for new messages.",
         default="INBOX",
     )
     parser.add_argument(
         "--loglevel",
         default="info",
-        help="logging level; example --loglevel debug, default=warning",
+        help="The python logging level to use.",
     )
 
     args = parser.parse_args()
