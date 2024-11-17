@@ -1,13 +1,14 @@
 # Kindle (Scribe) Email Fetch Hack
 
-This is a quick-and-dirty python script to log into an IMAP server,
-monitor incoming messages for the ones that contain the links to the
-PDFs that you sent from the Kindle scribe. Once such an email is found
-the PDF linked therein is downloaded to a local directory
-`OUTDIR/[name].pdf` (see below) and the email is deleted. The latest
-downloaded file is also copied to a preset filename to make it easier
-to find it. I'm always running `zathura OUTDIR/.latest.pdf` to
-have the latest kindle PDF visible.
+This is a python script (or, more adequately, a
+[bodge](https://www.youtube.com/watch?v=lIFE7h3m40U)) to log into an
+IMAP server, monitor incoming messages for the ones that contain the
+links to the PDFs that you sent from the Kindle scribe. Once such an
+email is found the PDF linked therein is downloaded to a local
+directory `OUTDIR/[name].pdf` (see below) and the email is
+deleted. The latest downloaded file is also copied to a preset
+filename to make it easier to find it. I'm always running `zathura
+OUTDIR/.latest.pdf` to have the latest kindle PDF visible.
 
 ## Installation / Usage
 
