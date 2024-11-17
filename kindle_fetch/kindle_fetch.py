@@ -97,54 +97,54 @@ async def wait_for_new_message(imap_client, kindle_dir, latest_path):
     try:
         while True:
             try:
-                LOGGER.debug("waiting for new message")
+                LOGGER.info("waiting for new message")
 
                 idle_task = await imap_client.idle_start(timeout=float("inf"))
                 msg = await imap_client.wait_server_push()
                 imap_client.idle_done()
-                await asyncio.wait_for(idle_task, timeout=10)
+                await asyncio.wait_for(idle_task, timeout=float("inf"))
 
             except TimeoutError:
                 continue
 
-        for message in msg:
-            if message.endswith(b"EXISTS"):
-                persistent_max_uid, head = await fetch_messages_headers(
-                    imap_client, persistent_max_uid
-                )
+            for message in msg:
+                if message.endswith(b"EXISTS"):
+                    persistent_max_uid, head = await fetch_messages_headers(
+                        imap_client, persistent_max_uid
+                    )
 
-                if not head:
-                    continue
+                    if not head:
+                        continue
 
-                body = await fetch_message_body(imap_client, persistent_max_uid)
+                    body = await fetch_message_body(imap_client, persistent_max_uid)
 
-                doc_title = get_document_title(head.as_string())
+                    doc_title = get_document_title(head.as_string())
 
-                if doc_title is None:
-                    LOGGER.info(f"No document title found in '{head.as_string()}'.")
-                    continue
+                    if doc_title is None:
+                        LOGGER.info(f"No document title found in '{head.as_string()}'.")
+                        continue
 
-                link, page = get_download_link(str(body))
+                    link, page = get_download_link(str(body))
 
-                if link is None:
-                    LOGGER.info("No pdf download link found.")
-                    LOGGER.debug(str(body))
-                    continue
+                    if link is None:
+                        LOGGER.info("No pdf download link found.")
+                        LOGGER.debug(str(body))
+                        continue
 
-                filename = f"{doc_title.replace(' ','_')}"
+                    filename = f"{doc_title.replace(' ','_')}"
 
-                if page:
-                    filename += f"_{page}_pages"
+                    if page:
+                        filename += f"_{page}_pages"
 
-                filename += ".pdf"
+                    filename += ".pdf"
 
-                outpath = kindle_dir / filename
-                LOGGER.info(f"downloading '{doc_title}' -> '{outpath}'")
+                    outpath = kindle_dir / filename
+                    LOGGER.info(f"downloading '{doc_title}' -> '{outpath}'")
 
-                urllib.request.urlretrieve(link, outpath)
-                shutil.copy(outpath, latest_path)
+                    urllib.request.urlretrieve(link, outpath)
+                    shutil.copy(outpath, latest_path)
 
-                await remove_message(imap_client, persistent_max_uid)
+                    await remove_message(imap_client, persistent_max_uid)
 
     except asyncio.CancelledError:
         LOGGER.info("exiting monitor")
