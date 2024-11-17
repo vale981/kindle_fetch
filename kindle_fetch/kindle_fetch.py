@@ -97,8 +97,7 @@ async def wait_for_new_message(imap_client, kindle_dir, latest_path):
     try:
         while True:
             try:
-                LOGGER.info("waiting for new message")
-
+                LOGGER.debug("waiting for new message")
                 idle_task = await imap_client.idle_start(timeout=float("inf"))
                 msg = await imap_client.wait_server_push()
                 imap_client.idle_done()
