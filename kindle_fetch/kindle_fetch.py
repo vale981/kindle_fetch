@@ -4,16 +4,20 @@ import asyncio
 import logging
 import quopri
 import re
+import sys
+import signal
 import shutil
 import subprocess
 import urllib.request
 from asyncio import wait_for
-from collections import namedtuple
 from dataclasses import dataclass
-from email.parser import BytesHeaderParser, BytesParser
 from pathlib import Path
-
-from aioimaplib import aioimaplib
+from .imap import (
+    fetch_message_body,
+    fetch_messages_headers,
+    make_client,
+    remove_message,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -55,92 +59,33 @@ def get_document_title(header_string):
     return m.group(1)
 
 
-def get_download_link(text):
+def get_download_link(body):
     """
     Get the download link and whether the file is the full document or
-    just `page` pages from the email body.
+    just `page` pages from the email ``body``.
     """
 
-    text = quopri.decodestring(text).decode("utf-8", errors="ignore")
-    LOGGER.debug(text)
+    body = quopri.decodestring(body).decode("utf-8", errors="ignore")
+    LOGGER.debug(body)
 
-    m = re.search(r'''href="(https://.*\.amazon\..*\.pdf.*?)"''', text)
+    m = re.search(r'''href="(https://.*\.amazon\..*\.pdf.*?)"''', body)
     if not m:
         return None, None
 
-    p = re.search(r"([0-9]+) page", text)
+    p = re.search(r"([0-9]+) page", body)
     page = p.group(1) if p else None
     return m.group(1), page
 
 
-ID_HEADER_SET = {
-    "Subject",
-}
-FETCH_MESSAGE_DATA_UID = re.compile(rb".*UID (?P<uid>\d+).*")
-FETCH_MESSAGE_DATA_SEQNUM = re.compile(rb"(?P<seqnum>\d+) FETCH.*")
-FETCH_MESSAGE_DATA_FLAGS = re.compile(rb".*FLAGS \((?P<flags>.*?)\).*")
-MessageAttributes = namedtuple("MessageAttributes", "uid flags sequence_number")
-
-
-async def fetch_messages_headers(imap_client: aioimaplib.IMAP4_SSL, max_uid: int):
+async def wait_for_new_message(imap_client, kindle_dir, latest_path):
     """
-    Fetch the headers of the messages in the mailbox.
+    Wait for a new message to arrive in the mailbox connected to by
+    ``imap_client``, detect Kindle messages and download the PDF
+    linked in if possible.
 
-    Pretty much stolen from the `aioimaplib` examples.
-    """
-
-    response = await imap_client.uid(
-        "fetch",
-        "%d:*" % (max_uid + 1),
-        "(UID FLAGS BODY.PEEK[HEADER.FIELDS (%s)])" % " ".join(ID_HEADER_SET),
-    )
-    new_max_uid = max_uid
-    message_headers = ""
-    if response.result == "OK":
-        for i in range(0, len(response.lines) - 1, 3):
-            fetch_command_without_literal = b"%s %s" % (
-                response.lines[i],
-                response.lines[i + 2],
-            )
-
-            uid = int(
-                FETCH_MESSAGE_DATA_UID.match(fetch_command_without_literal).group("uid")
-            )
-            flags = FETCH_MESSAGE_DATA_FLAGS.match(fetch_command_without_literal).group(
-                "flags"
-            )
-            seqnum = FETCH_MESSAGE_DATA_SEQNUM.match(
-                fetch_command_without_literal
-            ).group("seqnum")
-            # these attributes could be used for local state management
-            message_attrs = MessageAttributes(uid, flags, seqnum)
-
-            # uid fetch always includes the UID of the last message in the mailbox
-            # cf https://tools.ietf.org/html/rfc3501#page-61
-            if uid > max_uid:
-                message_headers = BytesHeaderParser().parsebytes(response.lines[i + 1])
-                new_max_uid = uid
-    else:
-        LOGGER.error("error %s" % response)
-    return new_max_uid, message_headers
-
-
-async def fetch_message_body(imap_client: aioimaplib.IMAP4_SSL, uid: int):
-    """Fetch the message body of the message with the given ``uid``."""
-    dwnld_resp = await imap_client.uid("fetch", str(uid), "BODY.PEEK[]")
-    return BytesParser().parsebytes(dwnld_resp.lines[1])
-
-
-async def remove_message(imap_client: aioimaplib.IMAP4_SSL, uid: int):
-    """Mark the message with the given ``uid`` as deleted and expunge it."""
-    await imap_client.uid("store", str(uid), "+FLAGS (\Deleted \Seen)")
-    return await imap_client.expunge()
-
-
-async def wait_for_new_message(imap_client, options: Options):
-    """
-    Wait for a new message to arrive in the mailbox, detect Kindle
-    messages and download the PDF linked in if possible.
+    The PDF will be saved in the directory ``kindle_dir`` with a name
+    derived from the document name. The latest downloaded file will be copied
+        to ``latest_path`` (relative to the ``kindle_dir``).
     """
 
     persistent_max_uid = 1
@@ -190,31 +135,13 @@ async def wait_for_new_message(imap_client, options: Options):
 
                 filename += ".pdf"
 
-                outpath = options.kindle_dir / filename
+                outpath = kindle_dir / filename
                 LOGGER.info(f"downloading '{doc_title}' -> '{outpath}'")
 
                 urllib.request.urlretrieve(link, outpath)
-                shutil.copy(outpath, options.latest_path)
+                shutil.copy(outpath, latest_path)
 
                 await remove_message(imap_client, persistent_max_uid)
-
-
-async def make_client(host, user, password, folder):
-    """Connect to the IMAP server and login.
-
-    :param host: the IMAP server to connect to
-    :param user: the IMAP username
-    :param password: the password to the server
-    :param folder: the folder to monitor for new messages
-    """
-
-    imap_client = aioimaplib.IMAP4_SSL(host=host)
-    await imap_client.wait_hello_from_server()
-    await imap_client.login(user, password)
-
-    await imap_client.select(folder)
-
-    return imap_client
 
 
 def parse_args_and_configure_logging():
@@ -275,18 +202,28 @@ def parse_args_and_configure_logging():
 
 
 def main():
+    """The entry point for the command line script."""
     options = parse_args_and_configure_logging()
     loop = asyncio.get_event_loop()
 
     LOGGER.info("logging in")
+
     try:
         client = loop.run_until_complete(
             make_client(options.server, options.user, options.password, options.mailbox)
         )
     except Exception as e:
         LOGGER.error(f"Failed to connect to the server: {e}")
-        exit(1)
+        sys.exit(1)
 
     LOGGER.info("starting monitor")
-    loop.run_until_complete(wait_for_new_message(client, options))
+
+    signal.signal(
+        signal.SIGINT,
+        lambda _, _1: loop.run_until_complete(client.logout()) and sys.exit(0),
+    )
+
+    loop.run_until_complete(
+        wait_for_new_message(client, options.kindle_dir, options.latest_path)
+    )
     loop.run_until_complete(client.logout())
