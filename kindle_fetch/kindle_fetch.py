@@ -9,7 +9,6 @@ import signal
 import shutil
 import subprocess
 import urllib.request
-from asyncio import wait_for
 from dataclasses import dataclass
 from pathlib import Path
 from .imap import (
@@ -93,16 +92,20 @@ async def wait_for_new_message(imap_client, kindle_dir, latest_path):
         imap_client, persistent_max_uid
     )
 
-    while True:
-        try:
-            LOGGER.debug("waiting for new message")
+    idle_task = None
 
-            idle_task = await imap_client.idle_start(timeout=float("inf"))
-            msg = await imap_client.wait_server_push()
-            imap_client.idle_done()
-            await wait_for(idle_task, timeout=float("inf"))
-        except TimeoutError:
-            continue
+    try:
+        while True:
+            try:
+                LOGGER.debug("waiting for new message")
+
+                idle_task = await imap_client.idle_start(timeout=float("inf"))
+                msg = await imap_client.wait_server_push()
+                imap_client.idle_done()
+                await asyncio.wait_for(idle_task, timeout=10)
+
+            except TimeoutError:
+                continue
 
         for message in msg:
             if message.endswith(b"EXISTS"):
@@ -142,6 +145,15 @@ async def wait_for_new_message(imap_client, kindle_dir, latest_path):
                 shutil.copy(outpath, latest_path)
 
                 await remove_message(imap_client, persistent_max_uid)
+
+    except asyncio.CancelledError:
+        LOGGER.info("exiting monitor")
+        if idle_task is not None:
+            imap_client.idle_done()
+            await asyncio.wait_for(idle_task, timeout=5)
+
+        await imap_client.logout()
+        LOGGER.info("logged out")
 
 
 def parse_args_and_configure_logging():
@@ -204,26 +216,23 @@ def parse_args_and_configure_logging():
 def main():
     """The entry point for the command line script."""
     options = parse_args_and_configure_logging()
-    loop = asyncio.get_event_loop()
 
     LOGGER.info("logging in")
 
-    try:
-        client = loop.run_until_complete(
-            make_client(options.server, options.user, options.password, options.mailbox)
+    with asyncio.Runner() as runner:
+        try:
+            client = runner.run(
+                make_client(
+                    options.server, options.user, options.password, options.mailbox
+                )
+            )
+
+        except Exception as e:
+            LOGGER.error(f"Failed to connect to the server: {e}")
+            sys.exit(1)
+
+        LOGGER.info("starting monitor")
+
+        runner.run(
+            wait_for_new_message(client, options.kindle_dir, options.latest_path)
         )
-    except Exception as e:
-        LOGGER.error(f"Failed to connect to the server: {e}")
-        sys.exit(1)
-
-    LOGGER.info("starting monitor")
-
-    signal.signal(
-        signal.SIGINT,
-        lambda _, _1: loop.run_until_complete(client.logout()) and sys.exit(0),
-    )
-
-    loop.run_until_complete(
-        wait_for_new_message(client, options.kindle_dir, options.latest_path)
-    )
-    loop.run_until_complete(client.logout())
