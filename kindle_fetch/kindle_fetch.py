@@ -2,6 +2,7 @@
 import argparse
 import asyncio
 import logging
+import quopri
 import re
 import shutil
 import subprocess
@@ -11,7 +12,7 @@ from collections import namedtuple
 from dataclasses import dataclass
 from email.parser import BytesHeaderParser, BytesParser
 from pathlib import Path
-import quopri
+
 from aioimaplib import aioimaplib
 
 logger = logging.getLogger(__name__)
