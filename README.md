@@ -10,6 +10,8 @@ deleted. The latest downloaded file is also copied to a preset
 filename to make it easier to find it. I'm always running `zathura
 OUTDIR/.latest.pdf` to have the latest kindle PDF visible.
 
+![](figures/demo.gif)
+
 ## Installation / Usage
 
 Either clone this repo and use `poerty install` and the like or run the nix flake with `nix run github:vale981/kindle_fetch -- [args]`.
