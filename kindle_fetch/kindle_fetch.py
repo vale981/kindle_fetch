@@ -168,30 +168,30 @@ def parse_args_and_configure_logging():
     parser.add_argument(
         "pass_command",
         type=str,
-        help="A shell command that returns the password to the server.",
+        help="a shell command that returns the password to the server",
     )
     parser.add_argument(
         "--outdir",
         type=str,
-        help="The kindle note PDFs will be saved into `OUTDIR/[name].pdf`.",
+        help="the kindle note PDFs will be saved into `OUTDIR/[name].pdf`",
         default="~/kindle_dump",
     )
     parser.add_argument(
         "--current_file",
         type=str,
-        help="The latest downloaded file will be copied to `OUTDIR/[current_file]",
+        help="the latest downloaded file will be copied to `OUTDIR/[current_file]",
         default=".latest.pdf",
     )
     parser.add_argument(
         "--imap_folder",
         type=str,
-        help="The IMAP folder to monitor for new messages.",
+        help="the IMAP folder to monitor for new messages",
         default="INBOX",
     )
     parser.add_argument(
         "--loglevel",
         default="info",
-        help="The python logging level to use.",
+        help="the python logging level to use",
     )
 
     args = parser.parse_args()

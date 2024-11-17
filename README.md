@@ -15,21 +15,24 @@ OUTDIR/.latest.pdf` to have the latest kindle PDF visible.
 Either clone this repo and use `poerty install` and the like or run the nix flake with `nix run github:vale981/kindle_fetch -- [args]`.
 
 ```
-usage: kindle_fetch [-h] [--outdir OUTDIR] [--current_file CURRENT_FILE] [--imap_folder IMAP_FOLDER] [--loglevel LOGLEVEL] server user pass_command
+usage: kindle_fetch [-h] [--outdir OUTDIR] [--current_file CURRENT_FILE] [--imap_folder IMAP_FOLDER]
+                    [--loglevel LOGLEVEL]
+                    server user pass_command
 
 Monitors you email and automatically downloads the kindle PDF notes sent to it.
 
 positional arguments:
   server                the IMAP server to connect to
   user                  the IMAP username
-  pass_command          A shell command that returns the password to the server.
+  pass_command          a shell command that returns the password to the server
 
 options:
   -h, --help            show this help message and exit
-  --outdir OUTDIR       The kindle note PDFs will be saved into `OUTDIR/[name].pdf`. (default: ~/kindle_dump)
+  --outdir OUTDIR       the kindle note PDFs will be saved into `OUTDIR/[name].pdf` (default: ~/kindle_dump)
   --current_file CURRENT_FILE
-                        The latest downloaded file will be copied to `OUTDIR/[current_file] (default: .latest.pdf)
+                        the latest downloaded file will be copied to `OUTDIR/[current_file] (default:
+                        .latest.pdf)
   --imap_folder IMAP_FOLDER
-                        The IMAP folder to monitor for new messages. (default: INBOX)
-  --loglevel LOGLEVEL   The python logging level to use. (default: info)
+                        the IMAP folder to monitor for new messages (default: INBOX)
+  --loglevel LOGLEVEL   the python logging level to use (default: info)
 ```
